@@ -1,0 +1,1018 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Plotter Declutter · Web</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,200..800&family=JetBrains+Mono:wght@300;400;500;600&display=swap" rel="stylesheet">
+<script src="scripts/clipper.js"></script>
+<style>
+  :root {
+    --bg-base: #0d0e10;
+    --bg-panel: #15171a;
+    --bg-elevated: #15171a;
+    --bg-input: #1a1d20;
+    --bg-input-focus: #1e2226;
+    --bg-hover: #1f2226;
+    --border: #25282d;
+    --border-subtle: #1f2227;
+    --border-focus: #4a4f56;
+    --text-primary: #e8e9ec;
+    --text-secondary: #a0a5ad;
+    --text-tertiary: #8e9299;
+    --text-quaternary: #72787f;
+    --accent: #39ff6a;
+    --accent-dim: #39ff6a80;
+    --accent-faint: #39ff6a14;
+    --accent-glow: #39ff6a33;
+    --amber: #FFB200;
+    --syn-string: #7a9b8a;
+    --error: #ff6b6b;
+    --font-display: 'Bricolage Grotesque', sans-serif;
+    --font-mono: 'JetBrains Mono', monospace;
+    --radius: 4px;
+    --radius-sm: 3px;
+    --ease: cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0;
+    background: var(--bg-base);
+    color: var(--text-primary);
+    font-family: var(--font-display);
+    font-feature-settings: "ss01", "ss02";
+    font-variation-settings: "wdth" 100;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    height: 100%;
+    overflow: hidden;
+  }
+  /* Subtle grain overlay -- same treatment as Swiss Grid Explorer, for a
+     consistent texture across both tools. */
+  body::before {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    opacity: 0.025;
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='3'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='0.5'/></svg>");
+  }
+  /* CRT scanlines -- restrained (4% opacity): reads as texture, not a gimmick. */
+  body::after {
+    content: "";
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+    background: repeating-linear-gradient(to bottom, rgba(0,0,0,0) 0px, rgba(0,0,0,0) 2px, rgba(0,0,0,0.6) 3px);
+    opacity: 0.04;
+  }
+  .app { display: flex; flex-direction: column; height: 100vh; position: relative; z-index: 1; }
+
+  .topbar {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 24px;
+    border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+  .topbar__title { font-size: 14px; font-weight: 600; letter-spacing: -0.01em; }
+  .topbar__title span { color: var(--text-quaternary); font-weight: 400; }
+  .topbar__nav { display: flex; align-items: center; gap: 16px; }
+  .nav-btn {
+    background: none; border: none; color: var(--text-tertiary);
+    font-family: var(--font-mono); font-size: 11px; letter-spacing: 0.05em;
+    text-transform: uppercase; cursor: pointer; padding: 4px 6px;
+    transition: color 150ms var(--ease);
+  }
+  .nav-btn:hover { color: var(--text-primary); }
+  .nav-btn.active { color: var(--accent); }
+
+  .main {
+    flex: 1; display: flex; overflow: hidden;
+  }
+
+  .stage {
+    flex: 1; display: flex; flex-direction: column;
+    align-items: center; justify-content: center;
+    padding: 32px; gap: 20px; min-width: 0;
+  }
+
+  .dropzone {
+    width: 100%; max-width: 560px; min-height: 280px;
+    border: 2px dashed var(--border);
+    border-radius: var(--radius);
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    gap: 12px; cursor: pointer;
+    transition: all 200ms var(--ease);
+    padding: 32px;
+    text-align: center;
+  }
+  .dropzone:hover, .dropzone.dragover {
+    border-color: var(--accent);
+    background: var(--accent-faint);
+  }
+  .dropzone__icon { color: var(--text-quaternary); transition: color 200ms var(--ease); }
+  .dropzone:hover .dropzone__icon, .dropzone.dragover .dropzone__icon { color: var(--accent); }
+  .dropzone__title { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+  .dropzone__hint { font-size: 12px; color: var(--text-quaternary); font-family: var(--font-mono); }
+
+  .preview-area {
+    width: 100%; max-width: 720px; flex: 1;
+    display: flex; flex-direction: column; gap: 16px;
+    min-height: 0;
+  }
+  .preview-tabs { display: flex; gap: 4px; }
+  .preview-tab {
+    background: none; border: none; color: var(--text-tertiary);
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase; cursor: pointer; padding: 6px 14px;
+    border-radius: var(--radius-sm); transition: all 150ms var(--ease);
+  }
+  .preview-tab.active { color: var(--bg-base); background: var(--accent); box-shadow: 0 0 12px var(--accent-glow); }
+  .preview-tab:not(.active):hover { color: var(--text-primary); background: var(--bg-hover); }
+
+  .preview-canvas {
+    flex: 1; min-height: 0;
+    background: #050506;
+    border: 1px solid #39ff6a33;
+    border-radius: var(--radius);
+    display: flex; align-items: center; justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+  .preview-canvas svg { max-width: 100%; max-height: 100%; }
+
+  .processing {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    color: var(--text-tertiary); font-family: var(--font-mono); font-size: 12px;
+  }
+  .spinner {
+    width: 28px; height: 28px; border-radius: 50%;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    animation: spin 800ms linear infinite;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .processing-error {
+    display: flex; flex-direction: column; align-items: center; gap: 14px;
+    color: var(--error); font-size: 13px; text-align: center; max-width: 360px; padding: 24px;
+  }
+  .stats-row {
+    display: flex; gap: 24px; justify-content: center;
+    font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary);
+    text-shadow: 0 0 8px var(--accent-faint);
+  }
+  .stats-row b { color: var(--accent); font-weight: 600; }
+
+  .actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 6px;
+    background: transparent; border: 1px solid var(--border);
+    color: var(--text-secondary); font-family: var(--font-display);
+    font-size: 12px; font-weight: 500; padding: 8px 14px;
+    border-radius: var(--radius-sm); cursor: pointer;
+    letter-spacing: -0.005em;
+    transition: all 150ms var(--ease);
+  }
+  .btn:hover { background: var(--bg-hover); border-color: var(--border-focus); color: var(--text-primary); }
+  .btn--primary { background: var(--accent); border-color: var(--accent); color: var(--bg-base); font-weight: 600; padding: 8px 20px; }
+  .btn--primary:hover { background: var(--accent); filter: brightness(1.12); border-color: var(--accent); color: var(--bg-base); transform: translateY(-1px); box-shadow: 0 0 20px var(--accent-glow); }
+  .btn--ghost { background: none; border-color: var(--border-subtle); color: var(--text-tertiary); }
+
+  .footer {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 12px 24px; border-top: 1px solid var(--border-subtle);
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-quaternary);
+    flex-shrink: 0;
+  }
+  .footer a { color: var(--text-quaternary); text-decoration: none; }
+  .footer a:hover { color: var(--text-primary); }
+
+  .hidden-input { display: none; }
+
+  .modal-overlay {
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    backdrop-filter: blur(4px);
+    display: none; align-items: center; justify-content: center; z-index: 100;
+    animation: fadeIn 200ms var(--ease);
+  }
+  .modal-overlay.show { display: flex; }
+  .modal {
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    border-radius: 6px; padding: 32px; max-width: 440px; width: 90%;
+    font-size: 13px; line-height: 1.65; color: var(--text-secondary);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+    animation: slideUp 280ms var(--ease);
+  }
+  .modal__title { font-size: 18px; font-weight: 500; color: var(--text-primary); margin: 0 0 16px; letter-spacing: -0.015em; }
+  .modal__close {
+    margin-top: 8px; width: 100%; justify-content: center;
+  }
+  @keyframes fadeIn { from { opacity: 0 } to { opacity: 1 } }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(10px) } to { opacity: 1; transform: none } }
+
+  /* Compare slider */
+  .compare-wrap {
+    position: relative; width: 100%; height: 100%; min-height: 0;
+    overflow: hidden; cursor: ew-resize; user-select: none;
+  }
+  .compare-layer {
+    position: absolute; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .compare-layer svg { width: 100%; height: 100%; display: block; }
+  .compare-layer--after { clip-path: inset(0 0 0 50%); }
+  .compare-handle {
+    position: absolute; top: 0; bottom: 0; left: 50%;
+    width: 2px; background: var(--accent);
+    transform: translateX(-1px); pointer-events: none;
+  }
+  .compare-handle__grip {
+    position: absolute; top: 50%; left: 50%;
+    transform: translate(-50%, -50%);
+    width: 30px; height: 30px; border-radius: 50%;
+    background: var(--accent); color: var(--bg-base);
+    display: flex; align-items: center; justify-content: center;
+    box-shadow: 0 0 0 4px var(--accent-glow);
+  }
+  .compare-tag {
+    position: absolute; top: 10px;
+    font-family: var(--font-mono); font-size: 10px; letter-spacing: 0.08em;
+    text-transform: uppercase; color: var(--text-primary);
+    background: rgba(0,0,0,0.5); padding: 4px 9px; border-radius: var(--radius-sm);
+    pointer-events: none;
+  }
+  .compare-tag--before { left: 10px; }
+  .compare-tag--after { right: 10px; }
+
+  /* Code view */
+  .code-view { width: 100%; height: 100%; min-height: 0; display: flex; flex-direction: column; gap: 0; }
+  .code-view__bar {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 12px; border-bottom: 1px solid var(--border-subtle);
+    font-family: var(--font-mono); font-size: 10px; color: var(--text-quaternary);
+    flex-shrink: 0;
+  }
+  .code-view pre {
+    margin: 0; padding: 14px 16px; overflow: auto; flex: 1;
+    font-family: var(--font-mono); font-size: 11px; line-height: 1.55;
+    color: var(--text-secondary); white-space: pre-wrap; word-break: break-all;
+  }
+  .btn--xs {
+    font-size: 11px; padding: 4px 10px; background: transparent;
+    border: 1px solid var(--border-subtle); color: var(--text-tertiary);
+    border-radius: var(--radius-sm); cursor: pointer; font-family: var(--font-mono);
+    transition: all 150ms var(--ease);
+  }
+  .btn--xs:hover { color: var(--text-primary); border-color: var(--border-focus); }
+  .btn--xs.active { color: var(--bg-base); background: var(--accent); border-color: var(--accent); }
+  .code-view__toggle { display: flex; gap: 4px; }
+  .code-view__stats {
+    padding: 6px 12px; font-family: var(--font-mono); font-size: 10px;
+    color: var(--text-quaternary); border-bottom: 1px solid var(--border-subtle);
+    flex-shrink: 0;
+  }
+  .tok-tag { color: var(--accent); }
+  .tok-attr { color: var(--amber); }
+  .tok-value { color: var(--syn-string); }
+  .tok-comment, .tok-decl { color: var(--text-quaternary); font-style: italic; }
+  .tok-bracket { color: var(--text-tertiary); }
+
+  /* Toast */
+  .toast {
+    position: fixed; bottom: 24px; left: 50%;
+    transform: translateX(-50%) translateY(10px);
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    color: var(--text-primary); font-size: 13px; padding: 10px 18px;
+    border-radius: 6px; opacity: 0; pointer-events: none;
+    transition: all 200ms var(--ease); z-index: 200;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <div class="topbar">
+    <div class="topbar__title">Plotter Declutter <span>· Web</span></div>
+    <div class="topbar__nav">
+      <button class="nav-btn" id="lang-es" data-i18n-skip>ES</button>
+      <button class="nav-btn active" id="lang-en" data-i18n-skip>EN</button>
+      <button class="nav-btn" id="btn-about" data-i18n="about">About</button>
+    </div>
+  </div>
+
+  <div class="main">
+    <div class="stage">
+
+      <div class="dropzone" id="dropzone">
+        <svg class="dropzone__icon" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+          <polyline points="17 8 12 3 7 8"/>
+          <line x1="12" y1="3" x2="12" y2="15"/>
+        </svg>
+        <div class="dropzone__title" data-i18n="dropTitle">Drop your SVG here</div>
+        <div class="dropzone__hint" data-i18n="dropHint">or click to browse · processed entirely in your browser</div>
+        <input type="file" accept=".svg,image/svg+xml" class="hidden-input" id="file-input">
+      </div>
+
+      <div class="preview-area" id="preview-area" style="display:none;">
+        <div class="preview-tabs">
+          <button class="preview-tab active" id="tab-before" data-i18n="tabBefore">Before</button>
+          <button class="preview-tab" id="tab-after" data-i18n="tabAfter">After</button>
+          <button class="preview-tab" id="tab-compare" data-i18n="tabCompare">Compare</button>
+          <button class="preview-tab" id="tab-code" data-i18n="tabCode">Code</button>
+        </div>
+        <div class="preview-canvas" id="preview-canvas"></div>
+        <div class="stats-row" id="stats-row"></div>
+        <div class="actions">
+          <button class="btn btn--ghost" id="btn-reset" data-i18n="reset">Load another file</button>
+          <button class="btn btn--primary" id="btn-download" data-i18n="download">Download cleaned SVG</button>
+          <button class="btn" id="btn-download-dxf" data-i18n="downloadDxf">Download DXF</button>
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <div class="footer">
+    <span><a href="https://github.com/vicc3d/plotter-declutter" target="_blank" rel="noopener">GitHub</a> · <a href="https://ko-fi.com/vicc3d" target="_blank" rel="noopener">Ko-fi</a></span>
+    <span id="footer-credit">3dvic.com</span>
+  </div>
+
+</div>
+
+<div class="modal-overlay" id="modal">
+  <div class="modal">
+    <h2 class="modal__title" id="modal-title">About</h2>
+    <div id="modal-body"></div>
+    <button class="btn btn--primary modal__close" id="modal-ok">OK</button>
+  </div>
+</div>
+
+<script>
+// ================================================================ //
+// i18n                                                               //
+// ================================================================ //
+const i18n = {
+  es: {
+    about: "Acerca de",
+    dropTitle: "Arrastrá tu SVG aquí",
+    dropHint: "o hacé clic para elegir el archivo · todo se procesa en tu navegador",
+    tabBefore: "Antes", tabAfter: "Después", tabCompare: "Comparar", tabCode: "Código",
+    reset: "Cargar otro archivo", download: "Descargar SVG limpio", downloadDxf: "Descargar DXF",
+    copyCode: "Copiar", toastCopied: "Copiado al portapapeles", toastCopyError: "No pude copiar",
+    codeStats: "{bL}: {bP} trazos · {bS}  →  {aL}: {aP} trazos · {aS}",
+    processing: "Procesando...",
+    statsLine: "{shapes} formas · {segments} segmentos visibles · {time}",
+    errorParse: "No pude leer ese archivo como SVG. ¿Es un .svg válido?",
+    errorNoPaths: "No encontré ningún <path> en el archivo. Esta herramienta trabaja sobre paths con fill/stroke (el patrón típico de Cavalry); otras formas (rect, circle, polygon) todavía no están soportadas.",
+    errorLib: "No pude cargar la librería de geometría (ClipperLib) desde el CDN. Revisá tu conexión o probá de nuevo en un minuto.",
+    errorGeneric: "Algo falló procesando el archivo: {msg}",
+    aboutTitle: "Acerca de Plotter Declutter",
+    aboutBody: "Plotter Declutter\n\nMuchos rigs generativos (Cavalry, Processing, etc.) exportan cada iteración como una forma con FILL sólido -- para tapar visualmente las iteraciones anteriores en el preview -- más un STROKE con el contorno. Un plotter de pluma ignora el fill, así que dibuja cada línea completa, incluyendo lo que debería quedar oculto.\n\nEsta herramienta resta de cada trazo la unión de todas las formas dibujadas después (las que lo tapan), dejando solo la parte realmente visible -- lista para plotear.\n\nTodo el cálculo corre en tu navegador, con ClipperLib. Ningún archivo se sube a ningún servidor.\n\n3dvic.com · MIT License",
+  },
+  en: {
+    about: "About",
+    dropTitle: "Drop your SVG here",
+    dropHint: "or click to browse · processed entirely in your browser",
+    tabBefore: "Before", tabAfter: "After", tabCompare: "Compare", tabCode: "Code",
+    reset: "Load another file", download: "Download cleaned SVG", downloadDxf: "Download DXF",
+    copyCode: "Copy", toastCopied: "Copied to clipboard", toastCopyError: "Couldn't copy",
+    codeStats: "{bL}: {bP} paths · {bS}  →  {aL}: {aP} paths · {aS}",
+    processing: "Processing...",
+    statsLine: "{shapes} shapes · {segments} visible segments · {time}",
+    errorParse: "Couldn't read that file as SVG. Is it a valid .svg?",
+    errorNoPaths: "No <path> elements found in the file. This tool works on paths with fill/stroke (the typical Cavalry pattern); other shapes (rect, circle, polygon) aren't supported yet.",
+    errorLib: "Couldn't load the geometry library (ClipperLib) from the CDN. Check your connection or try again in a minute.",
+    errorGeneric: "Something failed while processing the file: {msg}",
+    aboutTitle: "About Plotter Declutter",
+    aboutBody: "Plotter Declutter\n\nMany generative rigs (Cavalry, Processing, etc.) export each iteration as a solid-FILLED shape -- to visually mask earlier iterations in the preview -- plus a STROKE outline. A pen plotter ignores fill, so it draws every line in full, including the parts meant to be hidden.\n\nThis tool subtracts the union of every shape drawn after it (the ones on top) from each stroked line, leaving only the part that's actually visible -- ready to plot.\n\nEverything runs in your browser, via ClipperLib. No file is ever uploaded anywhere.\n\n3dvic.com · MIT License",
+  },
+};
+let currentLang = "en";
+const t = (k, vars) => {
+  let s = i18n[currentLang][k] || k;
+  if (vars) for (const key in vars) s = s.replace("{" + key + "}", vars[key]);
+  return s;
+};
+function setLang(lang) {
+  currentLang = lang;
+  document.getElementById("lang-es").classList.toggle("active", lang === "es");
+  document.getElementById("lang-en").classList.toggle("active", lang === "en");
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.getAttribute("data-i18n")); });
+  if (lastResult) {
+    renderStats();
+    if (document.getElementById("tab-compare").classList.contains("active")) renderCompare();
+    if (document.getElementById("tab-code").classList.contains("active")) renderCode();
+  }
+}
+document.getElementById("lang-es").onclick = () => setLang("es");
+document.getElementById("lang-en").onclick = () => setLang("en");
+
+document.getElementById("btn-about").onclick = () => {
+  document.getElementById("modal-title").textContent = t("aboutTitle");
+  document.getElementById("modal-body").innerHTML = t("aboutBody")
+    .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+    .replace("3dvic.com", '<a href="https://3dvic.com" target="_blank" rel="noopener" style="color:var(--accent)">3dvic.com</a>')
+    .replace("ClipperLib", '<a href="https://github.com/junmer/clipper-lib" target="_blank" rel="noopener" style="color:var(--accent)">ClipperLib</a>')
+    .replace(/\n/g, "<br>");
+  document.getElementById("modal").classList.add("show");
+};
+document.getElementById("modal-ok").onclick = () => document.getElementById("modal").classList.remove("show");
+
+// ================================================================ //
+// Path data parsing & flattening                                    //
+// (identical logic to declutter-core.js, validated against a known  //
+// Python/Shapely reference output before being embedded here)       //
+// ================================================================ //
+function flattenPath(d, tolerance) {
+  tolerance = tolerance || 0.5;
+  const tokens = d.match(/[MLHVCSQTAZmlhvcsqtaz]|-?\d*\.?\d+(?:[eE][+-]?\d+)?/g) || [];
+  let i = 0;
+  const next = () => parseFloat(tokens[i++]);
+  const subpaths = [];
+  let cur = [];
+  let x = 0, y = 0, sx = 0, sy = 0, lastCtrl = null, lastCmd = '';
+
+  function moveTo(px, py) { if (cur.length) subpaths.push(cur); cur = [[px, py]]; x = sx = px; y = sy = py; }
+  function lineTo(px, py) { cur.push([px, py]); x = px; y = py; }
+  function cubicTo(x1, y1, x2, y2, ex, ey) {
+    const n = Math.max(2, Math.ceil(bezierLength(x, y, x1, y1, x2, y2, ex, ey) / tolerance));
+    for (let k = 1; k <= n; k++) cur.push(cubicPoint(x, y, x1, y1, x2, y2, ex, ey, k / n));
+    x = ex; y = ey; lastCtrl = [2 * ex - x2, 2 * ey - y2];
+  }
+  function quadTo(x1, y1, ex, ey) {
+    const n = Math.max(2, Math.ceil(quadLength(x, y, x1, y1, ex, ey) / tolerance));
+    for (let k = 1; k <= n; k++) cur.push(quadPoint(x, y, x1, y1, ex, ey, k / n));
+    x = ex; y = ey; lastCtrl = [2 * ex - x1, 2 * ey - y1];
+  }
+  function arcTo(rx, ry, rot, large, sweep, ex, ey) {
+    for (const p of flattenArc(x, y, rx, ry, rot, large, sweep, ex, ey, tolerance)) cur.push(p);
+    x = ex; y = ey;
+  }
+
+  while (i < tokens.length) {
+    let tk = tokens[i];
+    if (/[A-Za-z]/.test(tk)) { lastCmd = tk; i++; } else { tk = lastCmd; if (tk === 'M' || tk === 'm') tk = (tk === 'M') ? 'L' : 'l'; }
+    const rel = tk === tk.toLowerCase();
+    const C = tk.toUpperCase();
+
+    if (C === 'M') { const px = next() + (rel ? x : 0), py = next() + (rel ? y : 0); moveTo(px, py); }
+    else if (C === 'L') { const px = next() + (rel ? x : 0), py = next() + (rel ? y : 0); lineTo(px, py); }
+    else if (C === 'H') { const px = next() + (rel ? x : 0); lineTo(px, y); }
+    else if (C === 'V') { const py = next() + (rel ? y : 0); lineTo(x, py); }
+    else if (C === 'C') {
+      const x1 = next() + (rel ? x : 0), y1 = next() + (rel ? y : 0);
+      const x2 = next() + (rel ? x : 0), y2 = next() + (rel ? y : 0);
+      const ex = next() + (rel ? x : 0), ey = next() + (rel ? y : 0);
+      cubicTo(x1, y1, x2, y2, ex, ey);
+    } else if (C === 'S') {
+      const c1 = lastCtrl || [x, y];
+      const x2 = next() + (rel ? x : 0), y2 = next() + (rel ? y : 0);
+      const ex = next() + (rel ? x : 0), ey = next() + (rel ? y : 0);
+      cubicTo(c1[0], c1[1], x2, y2, ex, ey);
+    } else if (C === 'Q') {
+      const x1 = next() + (rel ? x : 0), y1 = next() + (rel ? y : 0);
+      const ex = next() + (rel ? x : 0), ey = next() + (rel ? y : 0);
+      quadTo(x1, y1, ex, ey);
+    } else if (C === 'T') {
+      const c1 = lastCtrl || [x, y];
+      const ex = next() + (rel ? x : 0), ey = next() + (rel ? y : 0);
+      quadTo(c1[0], c1[1], ex, ey);
+    } else if (C === 'A') {
+      const rx = next(), ry = next(), rot = next(), large = next(), sweep = next();
+      const ex = next() + (rel ? x : 0), ey = next() + (rel ? y : 0);
+      arcTo(rx, ry, rot, large, sweep, ex, ey);
+    } else if (C === 'Z') { lineTo(sx, sy); x = sx; y = sy; }
+    else break;
+    if (C !== 'S' && C !== 'C' && C !== 'Q' && C !== 'T') lastCtrl = null;
+  }
+  if (cur.length) subpaths.push(cur);
+  return subpaths;
+}
+function cubicPoint(x0,y0,x1,y1,x2,y2,x3,y3,t){const mt=1-t,a=mt*mt*mt,b=3*mt*mt*t,c=3*mt*t*t,d=t*t*t;return[a*x0+b*x1+c*x2+d*x3,a*y0+b*y1+c*y2+d*y3];}
+function quadPoint(x0,y0,x1,y1,x2,y2,t){const mt=1-t,a=mt*mt,b=2*mt*t,c=t*t;return[a*x0+b*x1+c*x2,a*y0+b*y1+c*y2];}
+function dist(x0,y0,x1,y1){return Math.hypot(x1-x0,y1-y0);}
+function bezierLength(x0,y0,x1,y1,x2,y2,x3,y3){return dist(x0,y0,x1,y1)+dist(x1,y1,x2,y2)+dist(x2,y2,x3,y3);}
+function quadLength(x0,y0,x1,y1,x2,y2){return dist(x0,y0,x1,y1)+dist(x1,y1,x2,y2);}
+function flattenArc(x0,y0,rx,ry,rotDeg,largeArc,sweep,x1,y1,tolerance){
+  if (rx===0||ry===0) return [[x1,y1]];
+  const phi=(rotDeg*Math.PI)/180, cosPhi=Math.cos(phi), sinPhi=Math.sin(phi);
+  const dx=(x0-x1)/2, dy=(y0-y1)/2;
+  const x1p=cosPhi*dx+sinPhi*dy, y1p=-sinPhi*dx+cosPhi*dy;
+  rx=Math.abs(rx); ry=Math.abs(ry);
+  const lambda=(x1p*x1p)/(rx*rx)+(y1p*y1p)/(ry*ry);
+  if (lambda>1){const s=Math.sqrt(lambda);rx*=s;ry*=s;}
+  const sign=(largeArc!==sweep)?1:-1;
+  const num=rx*rx*ry*ry-rx*rx*y1p*y1p-ry*ry*x1p*x1p;
+  const den=rx*rx*y1p*y1p+ry*ry*x1p*x1p;
+  const co=sign*Math.sqrt(Math.max(0,num/den));
+  const cxp=co*(rx*y1p)/ry, cyp=-co*(ry*x1p)/rx;
+  const cx=cosPhi*cxp-sinPhi*cyp+(x0+x1)/2, cy=sinPhi*cxp+cosPhi*cyp+(y0+y1)/2;
+  const angle=(ux,uy,vx,vy)=>{const sgn=(ux*vy-uy*vx<0)?-1:1;const dot=Math.max(-1,Math.min(1,(ux*vx+uy*vy)/(Math.hypot(ux,uy)*Math.hypot(vx,vy))));return sgn*Math.acos(dot);};
+  const theta1=angle(1,0,(x1p-cxp)/rx,(y1p-cyp)/ry);
+  let dTheta=angle((x1p-cxp)/rx,(y1p-cyp)/ry,(-x1p-cxp)/rx,(-y1p-cyp)/ry);
+  if(!sweep&&dTheta>0)dTheta-=2*Math.PI;
+  if(sweep&&dTheta<0)dTheta+=2*Math.PI;
+  const n=Math.max(2,Math.ceil((Math.abs(dTheta)*Math.max(rx,ry))/tolerance));
+  const pts=[];
+  for(let k=1;k<=n;k++){const tt=theta1+(dTheta*k)/n;
+    pts.push([cosPhi*rx*Math.cos(tt)-sinPhi*ry*Math.sin(tt)+cx, sinPhi*rx*Math.cos(tt)+cosPhi*ry*Math.sin(tt)+cy]);}
+  return pts;
+}
+
+const IDENTITY = [1,0,0,1,0,0];
+function parseTransform(str) {
+  if (!str) return IDENTITY;
+  let m = IDENTITY;
+  const re = /(\w+)\s*\(([^)]*)\)/g;
+  let match;
+  while ((match = re.exec(str))) {
+    const fn = match[1];
+    const args = match[2].split(/[\s,]+/).filter(Boolean).map(Number);
+    let mm = IDENTITY;
+    if (fn === 'matrix') mm = args;
+    else if (fn === 'translate') mm = [1,0,0,1, args[0]||0, args[1]||0];
+    else if (fn === 'scale') { const sx=args[0], sy=args.length>1?args[1]:args[0]; mm=[sx,0,0,sy,0,0]; }
+    else if (fn === 'rotate') {
+      const a=(args[0]*Math.PI)/180, cos=Math.cos(a), sin=Math.sin(a);
+      if (args.length>=3) { const cx=args[1], cy=args[2];
+        m=multiply(m,[1,0,0,1,cx,cy]); mm=[cos,sin,-sin,cos,0,0]; m=multiply(m,mm); m=multiply(m,[1,0,0,1,-cx,-cy]); continue; }
+      mm=[cos,sin,-sin,cos,0,0];
+    }
+    else if (fn === 'skewX') mm=[1,0,Math.tan((args[0]*Math.PI)/180),1,0,0];
+    else if (fn === 'skewY') mm=[1,Math.tan((args[0]*Math.PI)/180),0,1,0,0];
+    m = multiply(m, mm);
+  }
+  return m;
+}
+function multiply(a,b){const[a1,b1,c1,d1,e1,f1]=a,[a2,b2,c2,d2,e2,f2]=b;
+  return [a1*a2+c1*b2, b1*a2+d1*b2, a1*c2+c1*d2, b1*c2+d1*d2, a1*e2+c1*f2+e1, b1*e2+d1*f2+f1];}
+function applyMatrix(points, m) { const [a,b,c,d,e,f]=m; return points.map(([x,y])=>[a*x+c*y+e, b*x+d*y+f]); }
+
+function getInheritedAttr(el, name, fallback) {
+  let cur = el;
+  while (cur && cur.getAttribute) { const v = cur.getAttribute(name); if (v !== null && v !== '') return v; cur = cur.parentElement; }
+  return fallback;
+}
+function getAccumulatedTransform(el, svgRoot) {
+  const chain = []; let cur = el;
+  while (cur && cur !== svgRoot) { const tt = cur.getAttribute && cur.getAttribute('transform'); if (tt) chain.unshift(parseTransform(tt)); cur = cur.parentElement; }
+  let m = IDENTITY; for (const cm of chain) m = multiply(m, cm); return m;
+}
+function isNoneLike(v) { return !v || v === 'none' || v === 'transparent'; }
+
+function extractShapes(doc) {
+  const svgRoot = doc.querySelector('svg');
+  const paths = Array.from(doc.querySelectorAll('path'));
+  const shapes = [];
+  for (const p of paths) {
+    const d = p.getAttribute('d');
+    if (!d) continue;
+    const fillRaw = p.getAttribute('fill');
+    const strokeRaw = p.getAttribute('stroke');
+    const fill = fillRaw !== null ? fillRaw : getInheritedAttr(p.parentElement, 'fill', '#000000');
+    const stroke = strokeRaw !== null ? strokeRaw : getInheritedAttr(p.parentElement, 'stroke', 'none');
+    const strokeWidthRaw = p.getAttribute('stroke-width');
+    const strokeWidth = strokeWidthRaw !== null ? strokeWidthRaw : getInheritedAttr(p.parentElement, 'stroke-width', '1');
+    const matrix = getAccumulatedTransform(p, svgRoot);
+    const subpaths = flattenPath(d, 0.5).map(pts => applyMatrix(pts, matrix));
+    shapes.push({ subpaths, hasFill: !isNoneLike(fill), hasStroke: !isNoneLike(stroke), stroke: isNoneLike(stroke) ? '#000000' : stroke, strokeWidth });
+  }
+  return shapes;
+}
+
+// ================================================================ //
+// Occlusion algorithm (ClipperLib)                                  //
+// ================================================================ //
+const SCALE = 1000;
+function toClipperPath(points) { return points.map(([x,y]) => ({ X: Math.round(x*SCALE), Y: Math.round(y*SCALE) })); }
+function fromClipperPath(path) { return path.map(p => [p.X/SCALE, p.Y/SCALE]); }
+function collectAllPolygons(polytree) {
+  const out = [];
+  function walk(node) {
+    if (node.m_polygon && node.m_polygon.length >= 2) out.push(node.m_polygon);
+    const childs = node.m_Childs || (node.Childs ? node.Childs() : []);
+    for (const c of childs) walk(c);
+  }
+  const top = polytree.m_Childs || polytree.Childs();
+  for (const c of top) walk(c);
+  return out;
+}
+function lineMinusMask(points, maskPaths) {
+  if (maskPaths.length === 0) return [points];
+  const subj = toClipperPath(points);
+  const cpr = new ClipperLib.Clipper();
+  cpr.AddPath(subj, ClipperLib.PolyType.ptSubject, false);
+  cpr.AddPaths(maskPaths, ClipperLib.PolyType.ptClip, true);
+  const polytree = new ClipperLib.PolyTree();
+  cpr.Execute(ClipperLib.ClipType.ctDifference, polytree, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+  return collectAllPolygons(polytree).map(fromClipperPath);
+}
+function unionInto(maskPaths, points) {
+  const poly = toClipperPath(points);
+  if (!ClipperLib.Clipper.Area(poly)) return maskPaths;
+  if (maskPaths.length === 0) return [poly];
+  const cpr = new ClipperLib.Clipper();
+  cpr.AddPaths(maskPaths, ClipperLib.PolyType.ptSubject, true);
+  cpr.AddPath(poly, ClipperLib.PolyType.ptClip, true);
+  const solution = new ClipperLib.Paths();
+  cpr.Execute(ClipperLib.ClipType.ctUnion, solution, ClipperLib.PolyFillType.pftNonZero, ClipperLib.PolyFillType.pftNonZero);
+  return solution;
+}
+function declutter(shapes) {
+  const n = shapes.length;
+  let mask = [];
+  const visible = new Array(n);
+  for (let i = n - 1; i >= 0; i--) {
+    const s = shapes[i];
+    if (s.hasStroke) {
+      const segments = [];
+      for (const sub of s.subpaths) { if (sub.length < 2) continue; for (const seg of lineMinusMask(sub, mask)) if (seg.length >= 2) segments.push(seg); }
+      visible[i] = segments;
+    } else { visible[i] = []; }
+    if (s.hasFill) { for (const sub of s.subpaths) { if (sub.length >= 3) mask = unionInto(mask, sub); } }
+  }
+  return visible;
+}
+
+// ================================================================ //
+// SVG building / rendering                                          //
+// ================================================================ //
+function buildRawSVG(width, height, shapesRaw) {
+  // "Before" preview: original strokes only, no occlusion -- shows the
+  // messy raw output a plotter would currently draw.
+  let body = '';
+  for (const s of shapesRaw) {
+    if (!s.hasStroke) continue;
+    for (const sub of s.subpaths) {
+      if (sub.length < 2) continue;
+      const d = 'M' + sub.map(([x,y]) => x.toFixed(2)+' '+y.toFixed(2)).join(' L');
+      body += `<path fill="none" stroke="${s.stroke}" stroke-width="${s.strokeWidth}" d="${d}"/>`;
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">${body}</svg>`;
+}
+function buildCleanSVG(width, height, shapesRaw, visible) {
+  let body = '';
+  for (let i = 0; i < shapesRaw.length; i++) {
+    if (!shapesRaw[i].hasStroke) continue;
+    for (const seg of visible[i]) {
+      if (seg.length < 2) continue;
+      const d = 'M' + seg.map(([x,y]) => x.toFixed(3)+' '+y.toFixed(3)).join(' L');
+      body += `<path fill="none" stroke="${shapesRaw[i].stroke}" stroke-width="${shapesRaw[i].strokeWidth}" d="${d}"/>`;
+    }
+  }
+  return `<?xml version="1.0" encoding="utf-8" ?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
+}
+
+// ================================================================ //
+// UI wiring                                                         //
+// ================================================================ //
+const dropzone = document.getElementById('dropzone');
+const fileInput = document.getElementById('file-input');
+const previewArea = document.getElementById('preview-area');
+const previewCanvas = document.getElementById('preview-canvas');
+const statsRow = document.getElementById('stats-row');
+
+let lastResult = null; // { width, height, shapesRaw, visible, elapsedMs, beforeSVG, afterSVG }
+
+dropzone.addEventListener('click', () => fileInput.click());
+dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
+dropzone.addEventListener('dragleave', () => dropzone.classList.remove('dragover'));
+dropzone.addEventListener('drop', e => {
+  e.preventDefault(); dropzone.classList.remove('dragover');
+  const file = e.dataTransfer.files[0];
+  if (file) handleFile(file);
+});
+fileInput.addEventListener('change', e => { if (e.target.files[0]) handleFile(e.target.files[0]); });
+
+function handleFile(file) {
+  const reader = new FileReader();
+  reader.onload = ev => processSVG(ev.target.result);
+  reader.readAsText(file);
+}
+
+function processSVG(svgText) {
+  let doc;
+  try {
+    doc = new DOMParser().parseFromString(svgText, 'image/svg+xml');
+    if (doc.querySelector('parsererror')) throw new Error('parse error');
+  } catch (e) {
+    alert(t('errorParse'));
+    return;
+  }
+  const svgEl = doc.querySelector('svg');
+  const shapesRaw = extractShapes(doc);
+  if (shapesRaw.length === 0) { alert(t('errorNoPaths')); return; }
+
+  const width = parseFloat(svgEl.getAttribute('width')) || parseViewBoxDim(svgEl, 2) || 1000;
+  const height = parseFloat(svgEl.getAttribute('height')) || parseViewBoxDim(svgEl, 3) || 1000;
+
+  dropzone.style.display = 'none';
+  previewArea.style.display = 'flex';
+  previewCanvas.innerHTML = `<div class="processing"><div class="spinner"></div><div>${t('processing')}</div></div>`;
+
+  // Let the "processing" state paint before the synchronous heavy work runs.
+  setTimeout(() => {
+    try {
+      if (typeof ClipperLib === 'undefined') {
+        showProcessingError(t('errorLib'));
+        return;
+      }
+      const t0 = performance.now();
+      const visible = declutter(shapesRaw);
+      const elapsedMs = performance.now() - t0;
+
+      const beforeSVG = buildRawSVG(width, height, shapesRaw);
+      const afterSVG = buildCleanSVG(width, height, shapesRaw, visible);
+
+      let segCount = 0;
+      for (const v of visible) segCount += v.length;
+
+      lastResult = { width, height, shapesRaw, visible, elapsedMs, beforeSVG, afterSVG, segCount };
+      codeViewSource = 'after';
+      showTab('after');
+      renderStats();
+    } catch (err) {
+      console.error('Plotter Declutter processing error:', err);
+      showProcessingError(t('errorGeneric', { msg: err.message }));
+    }
+  }, 30);
+}
+function showProcessingError(message) {
+  previewCanvas.innerHTML = `<div class="processing-error">
+    <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="13"/><line x1="12" y1="16" x2="12" y2="16.01"/></svg>
+    <div>${message.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")}</div>
+  </div>`;
+}
+function parseViewBoxDim(svgEl, idx) {
+  const vb = svgEl.getAttribute('viewBox');
+  if (!vb) return null;
+  const parts = vb.trim().split(/\s+/).map(Number);
+  return parts[idx] || null;
+}
+
+function showTab(which) {
+  if (!lastResult) return;
+  document.getElementById('tab-before').classList.toggle('active', which === 'before');
+  document.getElementById('tab-after').classList.toggle('active', which === 'after');
+  document.getElementById('tab-compare').classList.toggle('active', which === 'compare');
+  document.getElementById('tab-code').classList.toggle('active', which === 'code');
+
+  if (which === 'compare') { renderCompare(); return; }
+  if (which === 'code') { renderCode(); return; }
+
+  previewCanvas.innerHTML = which === 'before' ? lastResult.beforeSVG : lastResult.afterSVG;
+  styleInjectedSVG(previewCanvas.querySelector('svg'));
+}
+
+function styleInjectedSVG(svg) {
+  if (!svg) return;
+  svg.style.width = '100%'; svg.style.height = '100%';
+  svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  svg.querySelectorAll('path').forEach(p => {
+    if (!p.getAttribute('stroke') || p.getAttribute('stroke') === '#000000') p.setAttribute('stroke', '#FFED7D');
+  });
+}
+
+document.getElementById('tab-before').onclick = () => showTab('before');
+document.getElementById('tab-after').onclick = () => showTab('after');
+document.getElementById('tab-compare').onclick = () => showTab('compare');
+document.getElementById('tab-code').onclick = () => showTab('code');
+
+// ---------------------------------------------------------------- //
+// Compare slider                                                    //
+// ---------------------------------------------------------------- //
+function renderCompare() {
+  previewCanvas.innerHTML =
+    `<div class="compare-wrap" id="compare-wrap">` +
+    `<div class="compare-layer compare-layer--before">${lastResult.beforeSVG}</div>` +
+    `<div class="compare-layer compare-layer--after" id="compare-after-layer">${lastResult.afterSVG}</div>` +
+    `<span class="compare-tag compare-tag--before">${t('tabBefore')}</span>` +
+    `<span class="compare-tag compare-tag--after">${t('tabAfter')}</span>` +
+    `<div class="compare-handle" id="compare-handle"><div class="compare-handle__grip">` +
+    `<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="8 9 5 12 8 15"/><polyline points="16 9 19 12 16 15"/></svg>` +
+    `</div></div></div>`;
+  previewCanvas.querySelectorAll('.compare-layer svg').forEach(styleInjectedSVG);
+  setComparePos(50);
+}
+
+// Pure logic, kept separate from DOM access so it can be unit-tested
+// without needing real layout (jsdom doesn't compute getBoundingClientRect).
+function clampPct(v) { return Math.max(0, Math.min(100, v)); }
+function pctFromClientX(clientX, rectLeft, rectWidth) {
+  if (!rectWidth) return 50;
+  return clampPct(((clientX - rectLeft) / rectWidth) * 100);
+}
+
+function setComparePos(pct) {
+  pct = clampPct(pct);
+  const afterLayer = document.getElementById('compare-after-layer');
+  const handle = document.getElementById('compare-handle');
+  if (!afterLayer || !handle) return;
+  afterLayer.style.clipPath = `inset(0 0 0 ${pct}%)`;
+  handle.style.left = pct + '%';
+}
+
+let comparing = false;
+function compareUpdateFromEvent(e) {
+  const wrap = document.getElementById('compare-wrap');
+  if (!wrap) return;
+  const rect = wrap.getBoundingClientRect();
+  const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+  setComparePos(pctFromClientX(clientX, rect.left, rect.width));
+}
+previewCanvas.addEventListener('pointerdown', e => {
+  if (!e.target.closest('#compare-wrap')) return;
+  comparing = true;
+  compareUpdateFromEvent(e);
+});
+window.addEventListener('pointermove', e => { if (comparing) compareUpdateFromEvent(e); });
+window.addEventListener('pointerup', () => { comparing = false; });
+
+// ---------------------------------------------------------------- //
+// Code view                                                         //
+// ---------------------------------------------------------------- //
+function escapeHtml(str) {
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// Minimal self-contained XML/SVG syntax highlighter -- no external
+// library, keeps the tool fully offline. Single regex pass over the raw
+// text: matches declarations, comments, and tags as atomic tokens;
+// everything in between is plain (escaped) text content. A second,
+// narrower pass tokenizes attribute name="value" pairs inside each tag.
+// Deliberately avoids nested/backtracking-prone patterns since a single
+// `d` attribute can be hundreds of KB long.
+function highlightAttrs(attrStr) {
+  const attrRe = /([\w:-]+)(\s*=\s*)("(?:[^"\\]|\\.)*"|'(?:[^'\\]|\\.)*')/g;
+  let out = '', lastIndex = 0, m;
+  while ((m = attrRe.exec(attrStr)) !== null) {
+    out += escapeHtml(attrStr.slice(lastIndex, m.index));
+    out += `<span class="tok-attr">${escapeHtml(m[1])}</span>`;
+    out += escapeHtml(m[2]);
+    out += `<span class="tok-value">${escapeHtml(m[3])}</span>`;
+    lastIndex = attrRe.lastIndex;
+  }
+  out += escapeHtml(attrStr.slice(lastIndex));
+  return out;
+}
+function highlightXML(text) {
+  const tokenRe = /(<\?[\s\S]*?\?>)|(<!--[\s\S]*?-->)|(<\/?)([a-zA-Z][\w:-]*)([^>]*?)(\/?>)/g;
+  let out = '', lastIndex = 0, m;
+  while ((m = tokenRe.exec(text)) !== null) {
+    out += escapeHtml(text.slice(lastIndex, m.index));
+    if (m[1]) {
+      out += `<span class="tok-decl">${escapeHtml(m[1])}</span>`;
+    } else if (m[2]) {
+      out += `<span class="tok-comment">${escapeHtml(m[2])}</span>`;
+    } else {
+      out += `<span class="tok-bracket">${escapeHtml(m[3])}</span>`;
+      out += `<span class="tok-tag">${escapeHtml(m[4])}</span>`;
+      out += highlightAttrs(m[5]);
+      out += `<span class="tok-bracket">${escapeHtml(m[6])}</span>`;
+    }
+    lastIndex = tokenRe.lastIndex;
+  }
+  out += escapeHtml(text.slice(lastIndex));
+  return out;
+}
+
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  return (bytes / 1024).toFixed(1) + ' KB';
+}
+
+let codeViewSource = 'after';
+
+function renderCode() {
+  const beforeText = lastResult.beforeSVG;
+  const afterText = lastResult.afterSVG;
+  const beforeBytes = new Blob([beforeText]).size;
+  const afterBytes = new Blob([afterText]).size;
+  const beforePaths = (beforeText.match(/<path\b/g) || []).length;
+  const afterPaths = (afterText.match(/<path\b/g) || []).length;
+
+  const statsText = t('codeStats', {
+    bL: t('tabBefore'), bP: beforePaths, bS: formatBytes(beforeBytes),
+    aL: t('tabAfter'), aP: afterPaths, aS: formatBytes(afterBytes),
+  });
+
+  const shownText = codeViewSource === 'before' ? beforeText : afterText;
+
+  previewCanvas.innerHTML =
+    `<div class="code-view">` +
+    `<div class="code-view__bar">` +
+      `<div class="code-view__toggle">` +
+        `<button class="btn--xs${codeViewSource === 'before' ? ' active' : ''}" id="btn-code-before">${t('tabBefore')}</button>` +
+        `<button class="btn--xs${codeViewSource === 'after' ? ' active' : ''}" id="btn-code-after">${t('tabAfter')}</button>` +
+      `</div>` +
+      `<button class="btn--xs" id="btn-copy-code">${t('copyCode')}</button>` +
+    `</div>` +
+    `<div class="code-view__stats">${escapeHtml(statsText)}</div>` +
+    `<pre><code>${highlightXML(shownText)}</code></pre>` +
+    `</div>`;
+
+  document.getElementById('btn-code-before').onclick = () => { codeViewSource = 'before'; renderCode(); };
+  document.getElementById('btn-code-after').onclick = () => { codeViewSource = 'after'; renderCode(); };
+  document.getElementById('btn-copy-code').onclick = () => {
+    navigator.clipboard.writeText(shownText)
+      .then(() => toast(t('toastCopied')))
+      .catch(() => toast(t('toastCopyError')));
+  };
+}
+
+// ---------------------------------------------------------------- //
+// Toast                                                             //
+// ---------------------------------------------------------------- //
+let toastTimer = null;
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+
+function renderStats() {
+  if (!lastResult) return;
+  const timeStr = (lastResult.elapsedMs / 1000).toFixed(1) + 's';
+  statsRow.textContent = t('statsLine', { shapes: lastResult.shapesRaw.length, segments: lastResult.segCount, time: timeStr });
+}
+
+document.getElementById('btn-reset').onclick = () => {
+  lastResult = null;
+  fileInput.value = '';
+  previewArea.style.display = 'none';
+  dropzone.style.display = 'flex';
+};
+
+document.getElementById('btn-download').onclick = () => {
+  if (!lastResult) return;
+  const blob = new Blob([lastResult.afterSVG], { type: 'image/svg+xml' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'declutter_output.svg';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+// ---------------------------------------------------------------- //
+// DXF export                                                        //
+// ---------------------------------------------------------------- //
+// Minimal ASCII DXF R12 (AC1009) writer -- uses the old POLYLINE/VERTEX/
+// SEQEND entity trio rather than LWPOLYLINE (introduced in R14), for
+// maximum compatibility with older plotter/CAD software. Y is flipped
+// (height - y) since DXF/CAD convention is Y-up, while SVG is Y-down --
+// without this the output would come out vertically mirrored relative
+// to how it looks in the SVG preview.
+function buildDXF(width, height, shapesRaw, visible) {
+  const lines = [];
+  const w = v => lines.push(String(v));
+  w(0); w('SECTION');
+  w(2); w('HEADER');
+  w(9); w('$ACADVER');
+  w(1); w('AC1009');
+  w(0); w('ENDSEC');
+  w(0); w('SECTION');
+  w(2); w('ENTITIES');
+
+  for (let i = 0; i < shapesRaw.length; i++) {
+    if (!shapesRaw[i].hasStroke) continue;
+    for (const seg of visible[i]) {
+      if (seg.length < 2) continue;
+      w(0); w('POLYLINE');
+      w(8); w('0');
+      w(66); w('1');
+      w(70); w('0');
+      for (const [x, y] of seg) {
+        w(0); w('VERTEX');
+        w(8); w('0');
+        w(10); w(x.toFixed(4));
+        w(20); w((height - y).toFixed(4));
+      }
+      w(0); w('SEQEND');
+    }
+  }
+
+  w(0); w('ENDSEC');
+  w(0); w('EOF');
+  return lines.join('\n') + '\n';
+}
+
+document.getElementById('btn-download-dxf').onclick = () => {
+  if (!lastResult) return;
+  const dxf = buildDXF(lastResult.width, lastResult.height, lastResult.shapesRaw, lastResult.visible);
+  const blob = new Blob([dxf], { type: 'application/dxf' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'declutter_output.dxf';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+};
+
+setLang('en');
+</script>
+</body>
+</html>
