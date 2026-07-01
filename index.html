@@ -562,6 +562,38 @@ function getAccumulatedTransform(el, svgRoot) {
 }
 function isNoneLike(v) { return !v || v === 'none' || v === 'transparent'; }
 
+// Parse a CSS inline style string into a key-value map.
+// e.g. "fill:none;stroke:#ffed7d;stroke-width:0.5px" → {fill:'none', stroke:'#ffed7d', 'stroke-width':'0.5px'}
+function parseStyleAttr(styleStr) {
+  const result = {};
+  if (!styleStr) return result;
+  for (const decl of styleStr.split(';')) {
+    const colon = decl.indexOf(':');
+    if (colon < 0) continue;
+    const key = decl.slice(0, colon).trim();
+    const val = decl.slice(colon + 1).trim();
+    if (key) result[key] = val;
+  }
+  return result;
+}
+
+// Resolve a CSS property for an element, checking in order:
+// 1. inline style attribute on the element itself
+// 2. direct attribute on the element itself
+// 3. inherited inline style / attr up the ancestor chain
+// 4. fallback default value
+function resolveStyle(el, prop, fallback) {
+  let cur = el;
+  while (cur && cur.getAttribute) {
+    const style = parseStyleAttr(cur.getAttribute('style'));
+    if (prop in style && style[prop] !== '') return style[prop];
+    const direct = cur.getAttribute(prop);
+    if (direct !== null && direct !== '') return direct;
+    cur = cur.parentElement;
+  }
+  return fallback;
+}
+
 function extractShapes(doc) {
   const svgRoot = doc.querySelector('svg');
   const paths = Array.from(doc.querySelectorAll('path'));
@@ -569,12 +601,9 @@ function extractShapes(doc) {
   for (const p of paths) {
     const d = p.getAttribute('d');
     if (!d) continue;
-    const fillRaw = p.getAttribute('fill');
-    const strokeRaw = p.getAttribute('stroke');
-    const fill = fillRaw !== null ? fillRaw : getInheritedAttr(p.parentElement, 'fill', '#000000');
-    const stroke = strokeRaw !== null ? strokeRaw : getInheritedAttr(p.parentElement, 'stroke', 'none');
-    const strokeWidthRaw = p.getAttribute('stroke-width');
-    const strokeWidth = strokeWidthRaw !== null ? strokeWidthRaw : getInheritedAttr(p.parentElement, 'stroke-width', '1');
+    const fill = resolveStyle(p, 'fill', '#000000');
+    const stroke = resolveStyle(p, 'stroke', 'none');
+    const strokeWidth = resolveStyle(p, 'stroke-width', '1');
     const matrix = getAccumulatedTransform(p, svgRoot);
     const subpaths = flattenPath(d, 0.5).map(pts => applyMatrix(pts, matrix));
     shapes.push({ subpaths, hasFill: !isNoneLike(fill), hasStroke: !isNoneLike(stroke), stroke: isNoneLike(stroke) ? '#000000' : stroke, strokeWidth });
