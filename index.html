@@ -735,8 +735,19 @@ function processSVG(svgText) {
   const shapesRaw = extractShapes(doc);
   if (shapesRaw.length === 0) { alert(t('errorNoPaths')); return; }
 
-  const width = parseFloat(svgEl.getAttribute('width')) || parseViewBoxDim(svgEl, 2) || 1000;
-  const height = parseFloat(svgEl.getAttribute('height')) || parseViewBoxDim(svgEl, 3) || 1000;
+  // Always prefer the viewBox dimensions (user-space coordinates that match
+  // the path data). width/height may be in physical units ('11.25in', '297mm')
+  // which parseFloat partially reads (11.25 instead of 1080) and are NOT
+  // the coordinate space the paths live in. Only fall back to width/height
+  // when they are plain pixel numbers (no unit suffix) AND no viewBox exists.
+  const vbW = parseViewBoxDim(svgEl, 2);
+  const vbH = parseViewBoxDim(svgEl, 3);
+  const rawW = svgEl.getAttribute('width') || '';
+  const rawH = svgEl.getAttribute('height') || '';
+  const pxW = /^\s*[\d.]+\s*$/.test(rawW) ? parseFloat(rawW) : null;
+  const pxH = /^\s*[\d.]+\s*$/.test(rawH) ? parseFloat(rawH) : null;
+  const width  = vbW  || pxW  || 1000;
+  const height = vbH  || pxH  || 1000;
 
   dropzone.style.display = 'none';
   previewArea.style.display = 'flex';
