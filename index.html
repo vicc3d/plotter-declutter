@@ -153,6 +153,77 @@
   }
   .preview-canvas svg { max-width: 100%; max-height: 100%; }
 
+  /* Layer Controls */
+  .layer-control {
+    display: flex; flex-direction: column; gap: 8px;
+    background: var(--bg-panel); border: 1px solid var(--border);
+    padding: 12px; border-radius: var(--radius);
+  }
+  .layer-control__header {
+    display: flex; justify-content: space-between; align-items: center;
+  }
+  .layer-control__title {
+    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+    color: var(--text-tertiary); letter-spacing: 0.05em;
+  }
+  .tsp-control {
+    display: flex; align-items: center; gap: 6px;
+    font-family: var(--font-mono); font-size: 10px; text-transform: uppercase;
+    color: var(--text-tertiary); letter-spacing: 0.05em; cursor: pointer;
+    user-select: none;
+  }
+  .layer-control input[type="checkbox"],
+  .tsp-control input[type="checkbox"] {
+    appearance: none;
+    -webkit-appearance: none;
+    width: 13px;
+    height: 13px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--bg-input);
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    transition: all 150ms var(--ease);
+    margin: 0;
+  }
+  .layer-control input[type="checkbox"]:hover,
+  .tsp-control input[type="checkbox"]:hover {
+    border-color: var(--border-focus);
+    background: var(--bg-hover);
+  }
+  .layer-control input[type="checkbox"]:checked,
+  .tsp-control input[type="checkbox"]:checked {
+    border-color: var(--accent);
+  }
+  .layer-control input[type="checkbox"]:checked::after,
+  .tsp-control input[type="checkbox"]:checked::after {
+    content: "";
+    width: 5px;
+    height: 5px;
+    background: var(--accent);
+    border-radius: 1px;
+  }
+  .layer-control__list {
+    display: flex; flex-wrap: wrap; gap: 8px;
+  }
+  .layer-chip {
+    display: flex; align-items: center; gap: 6px;
+    background: var(--bg-input); border: 1px solid var(--border);
+    padding: 4px 10px; border-radius: var(--radius-sm);
+    font-family: var(--font-mono); font-size: 11px; cursor: pointer;
+    user-select: none; transition: all 150ms var(--ease);
+  }
+  .layer-chip:hover {
+    background: var(--bg-hover); border-color: var(--border-focus);
+  }
+  .layer-color-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    border: 1px solid rgba(255,255,255,0.2);
+  }
+
   .processing {
     display: flex; flex-direction: column; align-items: center; gap: 14px;
     color: var(--text-tertiary); font-family: var(--font-mono); font-size: 12px;
@@ -337,6 +408,16 @@
           <button class="preview-tab" id="btn-toggle-bg" style="margin-left: auto;" data-i18n="toggleBgLight">Light BG</button>
         </div>
         <div class="preview-canvas" id="preview-canvas"></div>
+        <div class="layer-control" id="layer-control" style="display:none;">
+          <div class="layer-control__header">
+            <span class="layer-control__title" data-i18n="layersTitle">Capas por color:</span>
+            <label class="tsp-control">
+              <input type="checkbox" id="chk-tsp" checked />
+              <span data-i18n="optimizeTsp">Optimizar orden (TSP)</span>
+            </label>
+          </div>
+          <div class="layer-control__list" id="layer-list"></div>
+        </div>
         <div class="stats-row" id="stats-row"></div>
         <div class="actions">
           <button class="btn btn--ghost" id="btn-reset" data-i18n="reset">Load another file</button>
@@ -376,6 +457,7 @@ const i18n = {
     dropHint: "o hacé clic para elegir el archivo · todo se procesa en tu navegador",
     tabBefore: "Antes", tabAfter: "Después", tabCompare: "Comparar", tabCode: "Código",
     toggleBgLight: "Fondo Claro", toggleBgDark: "Fondo Oscuro",
+    layersTitle: "Capas por color:", optimizeTsp: "Optimizar orden (TSP)",
     reset: "Cargar otro archivo", download: "Descargar SVG limpio", downloadDxf: "Descargar DXF",
     copyCode: "Copiar", toastCopied: "Copiado al portapapeles", toastCopyError: "No pude copiar",
     codeStats: "{bL}: {bP} trazos · {bS}  →  {aL}: {aP} trazos · {aS}",
@@ -394,6 +476,7 @@ const i18n = {
     dropHint: "or click to browse · processed entirely in your browser",
     tabBefore: "Before", tabAfter: "After", tabCompare: "Compare", tabCode: "Code",
     toggleBgLight: "Light BG", toggleBgDark: "Dark BG",
+    layersTitle: "Layers by color:", optimizeTsp: "Optimize order (TSP)",
     reset: "Load another file", download: "Download cleaned SVG", downloadDxf: "Download DXF",
     copyCode: "Copy", toastCopied: "Copied to clipboard", toastCopyError: "Couldn't copy",
     codeStats: "{bL}: {bP} paths · {bS}  →  {aL}: {aP} paths · {aS}",
@@ -421,6 +504,10 @@ function setLang(lang) {
   if (btnToggleBg) {
     const isLight = previewCanvas.classList.contains('light-bg');
     btnToggleBg.setAttribute('data-i18n', isLight ? 'toggleBgDark' : 'toggleBgLight');
+  }
+  const chkTspSpan = document.querySelector(".tsp-control span");
+  if (chkTspSpan) {
+    chkTspSpan.setAttribute('data-i18n', 'optimizeTsp');
   }
   document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.getAttribute("data-i18n")); });
   if (lastResult) {
@@ -617,17 +704,91 @@ function resolveStyle(el, prop, fallback) {
   return fallback;
 }
 
+function getPathData(el) {
+  const tag = el.tagName.toLowerCase();
+  if (tag === 'path') return el.getAttribute('d') || '';
+
+  if (tag === 'rect') {
+    const x = parseFloat(el.getAttribute('x') || 0);
+    const y = parseFloat(el.getAttribute('y') || 0);
+    const w = parseFloat(el.getAttribute('width') || 0);
+    const h = parseFloat(el.getAttribute('height') || 0);
+    let rx = parseFloat(el.getAttribute('rx') || 0);
+    let ry = parseFloat(el.getAttribute('ry') || 0);
+    const hasRx = el.hasAttribute('rx');
+    const hasRy = el.hasAttribute('ry');
+    if (hasRx && !hasRy) ry = rx;
+    if (hasRy && !hasRx) rx = ry;
+    rx = Math.min(rx, w / 2);
+    ry = Math.min(ry, h / 2);
+
+    if (rx === 0 && ry === 0) {
+      return `M ${x} ${y} h ${w} v ${h} h ${-w} z`;
+    } else {
+      return `M ${x + rx} ${y} ` +
+             `h ${w - 2 * rx} ` +
+             `a ${rx} ${ry} 0 0 1 ${rx} ${ry} ` +
+             `v ${h - 2 * ry} ` +
+             `a ${rx} ${ry} 0 0 1 ${-rx} ${ry} ` +
+             `h ${-(w - 2 * rx)} ` +
+             `a ${rx} ${ry} 0 0 1 ${-rx} ${-ry} ` +
+             `v ${-(h - 2 * ry)} ` +
+             `a ${rx} ${ry} 0 0 1 ${rx} ${-ry} ` +
+             `z`;
+    }
+  }
+
+  if (tag === 'circle') {
+    const cx = parseFloat(el.getAttribute('cx') || 0);
+    const cy = parseFloat(el.getAttribute('cy') || 0);
+    const r = parseFloat(el.getAttribute('r') || 0);
+    if (r <= 0) return '';
+    return `M ${cx - r} ${cy} a ${r} ${r} 0 1 0 ${2*r} 0 a ${r} ${r} 0 1 0 ${-2*r} 0 Z`;
+  }
+
+  if (tag === 'ellipse') {
+    const cx = parseFloat(el.getAttribute('cx') || 0);
+    const cy = parseFloat(el.getAttribute('cy') || 0);
+    const rx = parseFloat(el.getAttribute('rx') || 0);
+    const ry = parseFloat(el.getAttribute('ry') || 0);
+    if (rx <= 0 || ry <= 0) return '';
+    return `M ${cx - rx} ${cy} a ${rx} ${ry} 0 1 0 ${2*rx} 0 a ${rx} ${ry} 0 1 0 ${-2*rx} 0 Z`;
+  }
+
+  if (tag === 'line') {
+    const x1 = parseFloat(el.getAttribute('x1') || 0);
+    const y1 = parseFloat(el.getAttribute('y1') || 0);
+    const x2 = parseFloat(el.getAttribute('x2') || 0);
+    const y2 = parseFloat(el.getAttribute('y2') || 0);
+    return `M ${x1} ${y1} L ${x2} ${y2}`;
+  }
+
+  if (tag === 'polyline' || tag === 'polygon') {
+    const pointsStr = el.getAttribute('points') || '';
+    const nums = pointsStr.trim().split(/[\s,]+/).filter(Boolean).map(Number);
+    if (nums.length < 4) return '';
+    let dStr = `M ${nums[0]} ${nums[1]}`;
+    for (let k = 2; k < nums.length; k += 2) {
+      if (k + 1 < nums.length) dStr += ` L ${nums[k]} ${nums[k+1]}`;
+    }
+    if (tag === 'polygon') dStr += ' Z';
+    return dStr;
+  }
+
+  return '';
+}
+
 function extractShapes(doc) {
   const svgRoot = doc.querySelector('svg');
-  const paths = Array.from(doc.querySelectorAll('path'));
+  const elements = Array.from(doc.querySelectorAll('path, rect, circle, ellipse, line, polyline, polygon'));
   const shapes = [];
-  for (const p of paths) {
-    const d = p.getAttribute('d');
+  for (const el of elements) {
+    const d = getPathData(el);
     if (!d) continue;
-    const fill = resolveStyle(p, 'fill', '#000000');
-    const stroke = resolveStyle(p, 'stroke', 'none');
-    const strokeWidth = resolveStyle(p, 'stroke-width', '1');
-    const matrix = getAccumulatedTransform(p, svgRoot);
+    const fill = resolveStyle(el, 'fill', '#000000');
+    const stroke = resolveStyle(el, 'stroke', 'none');
+    const strokeWidth = resolveStyle(el, 'stroke-width', '1');
+    const matrix = getAccumulatedTransform(el, svgRoot);
     const subpaths = flattenPath(d, 0.5).map(pts => applyMatrix(pts, matrix));
     shapes.push({ subpaths, hasFill: !isNoneLike(fill), hasStroke: !isNoneLike(stroke), stroke: isNoneLike(stroke) ? '#000000' : stroke, strokeWidth });
   }
@@ -701,29 +862,107 @@ function declutter(shapes) {
 // ================================================================ //
 // SVG building / rendering                                          //
 // ================================================================ //
+function sortPathsTSP(segments) {
+  if (segments.length <= 1) return segments;
+  const sorted = [segments[0]];
+  const remaining = new Set(segments.slice(1));
+  let currentEnd = segments[0][segments[0].length - 1];
+
+  while (remaining.size > 0) {
+    let closestSeg = null;
+    let minDistance = Infinity;
+    let reverseClosest = false;
+
+    for (const seg of remaining) {
+      const start = seg[0];
+      const end = seg[seg.length - 1];
+
+      const dStart = Math.hypot(start[0] - currentEnd[0], start[1] - currentEnd[1]);
+      if (dStart < minDistance) {
+        minDistance = dStart;
+        closestSeg = seg;
+        reverseClosest = false;
+      }
+
+      const dEnd = Math.hypot(end[0] - currentEnd[0], end[1] - currentEnd[1]);
+      if (dEnd < minDistance) {
+        minDistance = dEnd;
+        closestSeg = seg;
+        reverseClosest = true;
+      }
+    }
+
+    if (closestSeg) {
+      remaining.delete(closestSeg);
+      const segToAdd = reverseClosest ? [...closestSeg].reverse() : closestSeg;
+      sorted.push(segToAdd);
+      currentEnd = segToAdd[segToAdd.length - 1];
+    } else {
+      break;
+    }
+  }
+  return sorted;
+}
+
 function buildRawSVG(width, height, shapesRaw) {
-  // "Before" preview: original strokes only, no occlusion -- shows the
-  // messy raw output a plotter would currently draw.
-  let body = '';
+  const groups = {};
   for (const s of shapesRaw) {
     if (!s.hasStroke) continue;
+    const color = s.stroke.toLowerCase();
+    if (activeColors && !activeColors.has(color)) continue;
+    if (!groups[color]) groups[color] = [];
     for (const sub of s.subpaths) {
-      if (sub.length < 2) continue;
-      const d = 'M' + sub.map(([x,y]) => x.toFixed(2)+' '+y.toFixed(2)).join(' L');
-      body += `<path fill="none" stroke="${s.stroke}" stroke-width="${s.strokeWidth}" d="${d}"/>`;
+      if (sub.length >= 2) groups[color].push(sub);
     }
+  }
+
+  let body = '';
+  for (const color in groups) {
+    let segments = groups[color];
+    if (optimizePaths) {
+      segments = sortPathsTSP(segments);
+    }
+    const pathsHtml = segments.map(seg => {
+      const d = 'M' + seg.map(([x,y]) => x.toFixed(2)+' '+y.toFixed(2)).join(' L');
+      const matchedShape = shapesRaw.find(s => s.stroke.toLowerCase() === color);
+      const sw = matchedShape ? matchedShape.strokeWidth : '1';
+      return `<path fill="none" stroke="${color}" stroke-width="${sw}" d="${d}"/>`;
+    }).join('\n');
+
+    body += `<g id="layer-${color.replace('#', '')}" stroke="${color}">\n${pathsHtml}\n</g>\n`;
   }
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 }
+
 function buildCleanSVG(width, height, shapesRaw, visible) {
-  let body = '';
+  const groups = {};
   for (let i = 0; i < shapesRaw.length; i++) {
-    if (!shapesRaw[i].hasStroke) continue;
-    for (const seg of visible[i]) {
-      if (seg.length < 2) continue;
-      const d = 'M' + seg.map(([x,y]) => x.toFixed(3)+' '+y.toFixed(3)).join(' L');
-      body += `<path fill="none" stroke="${shapesRaw[i].stroke}" stroke-width="${shapesRaw[i].strokeWidth}" d="${d}"/>`;
+    const s = shapesRaw[i];
+    if (!s.hasStroke) continue;
+    const color = s.stroke.toLowerCase();
+    if (activeColors && !activeColors.has(color)) continue;
+    
+    let segments = visible[i];
+    if (!groups[color]) groups[color] = [];
+    for (const seg of segments) {
+      if (seg.length >= 2) groups[color].push(seg);
     }
+  }
+
+  let body = '';
+  for (const color in groups) {
+    let segments = groups[color];
+    if (optimizePaths) {
+      segments = sortPathsTSP(segments);
+    }
+    const pathsHtml = segments.map(seg => {
+      const d = 'M' + seg.map(([x,y]) => x.toFixed(3)+' '+y.toFixed(3)).join(' L');
+      const matchedShape = shapesRaw.find(s => s.stroke.toLowerCase() === color);
+      const sw = matchedShape ? matchedShape.strokeWidth : '1';
+      return `<path fill="none" stroke="${color}" stroke-width="${sw}" d="${d}"/>`;
+    }).join('\n');
+
+    body += `<g id="layer-${color.replace('#', '')}" stroke="${color}">\n${pathsHtml}\n</g>\n`;
   }
   return `<?xml version="1.0" encoding="utf-8" ?>\n<svg xmlns="http://www.w3.org/2000/svg" width="${width}" height="${height}" viewBox="0 0 ${width} ${height}">${body}</svg>`;
 }
@@ -738,6 +977,8 @@ const previewCanvas = document.getElementById('preview-canvas');
 const statsRow = document.getElementById('stats-row');
 
 let lastResult = null; // { width, height, shapesRaw, visible, elapsedMs, beforeSVG, afterSVG }
+let activeColors = null;
+let optimizePaths = true;
 
 dropzone.addEventListener('click', () => fileInput.click());
 dropzone.addEventListener('dragover', e => { e.preventDefault(); dropzone.classList.add('dragover'); });
@@ -797,6 +1038,9 @@ function processSVG(svgText) {
       const visible = declutter(shapesRaw);
       const elapsedMs = performance.now() - t0;
 
+      activeColors = new Set(shapesRaw.filter(s => s.hasStroke).map(s => s.stroke.toLowerCase()));
+      renderLayerControls(shapesRaw);
+
       const beforeSVG = buildRawSVG(width, height, shapesRaw);
       const afterSVG = buildCleanSVG(width, height, shapesRaw, visible);
 
@@ -812,6 +1056,77 @@ function processSVG(svgText) {
       showProcessingError(t('errorGeneric', { msg: err.message }));
     }
   }, 30);
+}
+
+function renderLayerControls(shapesRaw) {
+  const container = document.getElementById('layer-control');
+  const list = document.getElementById('layer-list');
+  if (!container || !list) return;
+
+  const colors = [...new Set(shapesRaw.filter(s => s.hasStroke).map(s => s.stroke.toLowerCase()))];
+  container.style.display = 'flex';
+  list.innerHTML = '';
+
+  if (colors.length === 0) {
+    list.innerHTML = `<span style="font-family: var(--font-mono); font-size: 11px; color: var(--text-tertiary);">No layers found</span>`;
+    return;
+  }
+
+
+  colors.forEach(color => {
+    const chip = document.createElement('label');
+    chip.className = 'layer-chip';
+
+    const checkbox = document.createElement('input');
+    checkbox.type = 'checkbox';
+    checkbox.checked = activeColors.has(color);
+    checkbox.onchange = () => {
+      if (checkbox.checked) {
+        activeColors.add(color);
+      } else {
+        activeColors.delete(color);
+      }
+      onLayersChanged();
+    };
+
+    const dot = document.createElement('span');
+    dot.className = 'layer-color-dot';
+    dot.style.backgroundColor = color;
+
+    const label = document.createElement('span');
+    label.textContent = color.toUpperCase();
+
+    chip.appendChild(checkbox);
+    chip.appendChild(dot);
+    chip.appendChild(label);
+    list.appendChild(chip);
+  });
+}
+
+function onLayersChanged() {
+  if (!lastResult) return;
+  lastResult.beforeSVG = buildRawSVG(lastResult.width, lastResult.height, lastResult.shapesRaw);
+  lastResult.afterSVG = buildCleanSVG(lastResult.width, lastResult.height, lastResult.shapesRaw, lastResult.visible);
+
+  let segCount = 0;
+  for (let i = 0; i < lastResult.shapesRaw.length; i++) {
+    const s = lastResult.shapesRaw[i];
+    if (!s.hasStroke) continue;
+    const color = s.stroke.toLowerCase();
+    if (activeColors && !activeColors.has(color)) continue;
+    segCount += lastResult.visible[i].length;
+  }
+  lastResult.segCount = segCount;
+
+  const activeTab = document.querySelector('.preview-tab.active');
+  if (activeTab) {
+    const id = activeTab.id;
+    if (id === 'tab-before') showTab('before');
+    else if (id === 'tab-after') showTab('after');
+    else if (id === 'tab-compare') renderCompare();
+    else if (id === 'tab-code') renderCode();
+  }
+  renderStats();
 }
 function showProcessingError(message) {
   previewCanvas.innerHTML = `<div class="processing-error">
@@ -1032,6 +1347,7 @@ document.getElementById('btn-reset').onclick = () => {
   fileInput.value = '';
   previewArea.style.display = 'none';
   dropzone.style.display = 'flex';
+  document.getElementById('layer-control').style.display = 'none';
 };
 
 document.getElementById('btn-download').onclick = () => {
@@ -1064,17 +1380,32 @@ function buildDXF(width, height, shapesRaw, visible) {
   w(0); w('SECTION');
   w(2); w('ENTITIES');
 
+  const groups = {};
   for (let i = 0; i < shapesRaw.length; i++) {
-    if (!shapesRaw[i].hasStroke) continue;
+    const s = shapesRaw[i];
+    if (!s.hasStroke) continue;
+    const color = s.stroke.toLowerCase();
+    if (activeColors && !activeColors.has(color)) continue;
+    if (!groups[color]) groups[color] = [];
     for (const seg of visible[i]) {
-      if (seg.length < 2) continue;
+      if (seg.length >= 2) groups[color].push(seg);
+    }
+  }
+
+  for (const color in groups) {
+    let segments = groups[color];
+    if (optimizePaths) {
+      segments = sortPathsTSP(segments);
+    }
+    const layerName = 'layer_' + color.replace('#', '');
+    for (const seg of segments) {
       w(0); w('POLYLINE');
-      w(8); w('0');
+      w(8); w(layerName);
       w(66); w('1');
       w(70); w('0');
       for (const [x, y] of seg) {
         w(0); w('VERTEX');
-        w(8); w('0');
+        w(8); w(layerName);
         w(10); w(x.toFixed(4));
         w(20); w((height - y).toFixed(4));
       }
@@ -1096,6 +1427,12 @@ document.getElementById('btn-download-dxf').onclick = () => {
   a.href = url; a.download = 'declutter_output.dxf';
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(url);
+};
+
+document.getElementById('chk-tsp').checked = optimizePaths;
+document.getElementById('chk-tsp').onchange = (e) => {
+  optimizePaths = e.target.checked;
+  onLayersChanged();
 };
 
 setLang('en');

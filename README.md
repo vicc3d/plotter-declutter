@@ -16,32 +16,52 @@ For every stroked path, subtract the union of every filled shape that comes *aft
 
 Processes a few hundred shapes in under a second, ~1000+ in a few seconds, entirely in-browser via [ClipperLib](https://sourceforge.net/projects/jsclipper/).
 
+## Features
+
+- **2D Hidden Line Removal (HLR)**: Cleans overlapping vector line drawings instantly.
+- **Basic Shape Conversion**: Automatically converts `<rect>` (including rounded rects), `<circle>`, `<ellipse>`, `<line>`, `<polyline>`, and `<polygon>` elements to equivalent paths on import.
+- **Color Layer Preservation**: Groups paths by their stroke colors into nested SVG groups (`<g id="layer-..." stroke="...">`) and DXF layers.
+- **Interactive Layer Checklist**: Toggle individual color layers on and off to filter views and select which colors to download.
+- **TSP Path Optimization**: Sorts paths using a Nearest Neighbor (TSP) algorithm with automatic line reversal to minimize physical pen lift travel distance ("air travel") and plot faster.
+- **Light/Dark BG Toggle**: Change the preview canvas background to light or dark mode; strokes dynamically adjust contrast for perfect visibility.
+- **Dual Export**: Export clean SVGs or DXF format files.
+
 ## How to use it
 
 1. Open `index.html` (double-click, or drag into a browser tab).
 2. Drop your SVG, or click to browse.
-3. Compare Before / After.
-4. Download the cleaned SVG, ready to send to your plotter.
+3. Use the checkboxes to toggle layers, select the canvas background mode, or activate TSP path sorting.
+4. Compare Before / After.
+5. Download the cleaned SVG or DXF, ready to send to your plotter.
 
 **Fully offline.** No file is ever uploaded anywhere, and no internet connection is needed at all — `scripts/clipper.js` is vendored locally in this repo (not loaded from a CDN), so the whole tool works the moment you open `index.html`, network or no network.
 
-## Limitations
+## CLI Tools
 
-- Works on `<path>` elements (the typical export shape from Cavalry-style rigs). Native `<rect>`, `<circle>`, `<polygon>`, etc. aren't supported yet.
-- Treats each path's first fill rule as a simple filled region; complex even-odd hole patterns within a single path aren't modeled precisely.
-- A companion **Python CLI script** (`plotter_declutter.py`, in this repo) does the same thing for users comfortable with the command line, and additionally supports curve-heavy SVGs via `svgelements` + `shapely`.
+We provide two command-line tools to declutter SVGs headlessly:
+
+### 1. Node.js CLI (`declutter-cli.js`)
+A zero-dependency JavaScript CLI that runs out of the box in Node.
+*   **Single File**: `node declutter-cli.js input.svg output_clean.svg`
+*   **Batch Directory**: `node declutter-cli.js ./my_svgs_folder/`
+*   **Disable sorting**: append `--no-sort`
+
+### 2. Python CLI (`plotter_declutter.py`)
+An alternative python CLI that handles curve-heavy SVGs via `svgelements` + `shapely` dependencies.
 
 ## Structure
 
 ```
 plotter-declutter/
-├── index.html              ← the tool, double-click and go
+├── index.html              ← the web tool, double-click and go
+├── declutter-cli.js        ← Node.js CLI tool (zero dependencies)
+├── plotter_declutter.py    ← optional Python CLI alternative
 ├── scripts/
 │   └── clipper.js          ← ClipperLib, vendored locally for offline use
-├── plotter_declutter.py    ← optional Python CLI alternative
 └── README.md
 ```
 
 ## License
 
 MIT
+
