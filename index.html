@@ -135,6 +135,21 @@
     display: flex; align-items: center; justify-content: center;
     overflow: hidden;
     position: relative;
+    transition: background 200ms var(--ease), border-color 200ms var(--ease);
+  }
+  .preview-canvas.light-bg {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+  }
+  .preview-canvas.light-bg .compare-layer--after {
+    background: #f8fafc;
+  }
+  .preview-canvas.light-bg .compare-tag {
+    color: #475569;
+  }
+  .preview-canvas.light-bg .processing,
+  .preview-canvas.light-bg .processing-error {
+    color: #1e293b;
   }
   .preview-canvas svg { max-width: 100%; max-height: 100%; }
 
@@ -319,6 +334,7 @@
           <button class="preview-tab" id="tab-after" data-i18n="tabAfter">After</button>
           <button class="preview-tab" id="tab-compare" data-i18n="tabCompare">Compare</button>
           <button class="preview-tab" id="tab-code" data-i18n="tabCode">Code</button>
+          <button class="preview-tab" id="btn-toggle-bg" style="margin-left: auto;" data-i18n="toggleBgLight">Light BG</button>
         </div>
         <div class="preview-canvas" id="preview-canvas"></div>
         <div class="stats-row" id="stats-row"></div>
@@ -359,6 +375,7 @@ const i18n = {
     dropTitle: "Arrastrá tu SVG aquí",
     dropHint: "o hacé clic para elegir el archivo · todo se procesa en tu navegador",
     tabBefore: "Antes", tabAfter: "Después", tabCompare: "Comparar", tabCode: "Código",
+    toggleBgLight: "Fondo Claro", toggleBgDark: "Fondo Oscuro",
     reset: "Cargar otro archivo", download: "Descargar SVG limpio", downloadDxf: "Descargar DXF",
     copyCode: "Copiar", toastCopied: "Copiado al portapapeles", toastCopyError: "No pude copiar",
     codeStats: "{bL}: {bP} trazos · {bS}  →  {aL}: {aP} trazos · {aS}",
@@ -376,6 +393,7 @@ const i18n = {
     dropTitle: "Drop your SVG here",
     dropHint: "or click to browse · processed entirely in your browser",
     tabBefore: "Before", tabAfter: "After", tabCompare: "Compare", tabCode: "Code",
+    toggleBgLight: "Light BG", toggleBgDark: "Dark BG",
     reset: "Load another file", download: "Download cleaned SVG", downloadDxf: "Download DXF",
     copyCode: "Copy", toastCopied: "Copied to clipboard", toastCopyError: "Couldn't copy",
     codeStats: "{bL}: {bP} paths · {bS}  →  {aL}: {aP} paths · {aS}",
@@ -399,6 +417,11 @@ function setLang(lang) {
   currentLang = lang;
   document.getElementById("lang-es").classList.toggle("active", lang === "es");
   document.getElementById("lang-en").classList.toggle("active", lang === "en");
+  const btnToggleBg = document.getElementById("btn-toggle-bg");
+  if (btnToggleBg) {
+    const isLight = previewCanvas.classList.contains('light-bg');
+    btnToggleBg.setAttribute('data-i18n', isLight ? 'toggleBgDark' : 'toggleBgLight');
+  }
   document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.getAttribute("data-i18n")); });
   if (lastResult) {
     renderStats();
@@ -453,7 +476,7 @@ function flattenPath(d, tolerance) {
 
   while (i < tokens.length) {
     let tk = tokens[i];
-    if (/[A-Za-z]/.test(tk)) { lastCmd = tk; i++; } else { tk = lastCmd; if (tk === 'M' || tk === 'm') tk = (tk === 'M') ? 'L' : 'l'; }
+    if (/^[A-Za-z]$/.test(tk)) { lastCmd = tk; i++; } else { tk = lastCmd; if (tk === 'M' || tk === 'm') tk = (tk === 'M') ? 'L' : 'l'; }
     const rel = tk === tk.toLowerCase();
     const C = tk.toUpperCase();
 
@@ -653,14 +676,24 @@ function declutter(shapes) {
   const n = shapes.length;
   let mask = [];
   const visible = new Array(n);
+
   for (let i = n - 1; i >= 0; i--) {
     const s = shapes[i];
     if (s.hasStroke) {
       const segments = [];
-      for (const sub of s.subpaths) { if (sub.length < 2) continue; for (const seg of lineMinusMask(sub, mask)) if (seg.length >= 2) segments.push(seg); }
+      for (const sub of s.subpaths) {
+        if (sub.length < 2) continue;
+        for (const seg of lineMinusMask(sub, mask)) {
+          if (seg.length >= 2) segments.push(seg);
+        }
+      }
       visible[i] = segments;
     } else { visible[i] = []; }
-    if (s.hasFill) { for (const sub of s.subpaths) { if (sub.length >= 3) mask = unionInto(mask, sub); } }
+    if (s.hasFill) {
+      for (const sub of s.subpaths) {
+        if (sub.length >= 3) mask = unionInto(mask, sub);
+      }
+    }
   }
   return visible;
 }
@@ -811,8 +844,13 @@ function styleInjectedSVG(svg) {
   if (!svg) return;
   svg.style.width = '100%'; svg.style.height = '100%';
   svg.setAttribute('preserveAspectRatio', 'xMidYMid meet');
+  const isLight = previewCanvas.classList.contains('light-bg');
+  const defaultStroke = isLight ? '#0d0e10' : '#FFED7D';
   svg.querySelectorAll('path').forEach(p => {
-    if (!p.getAttribute('stroke') || p.getAttribute('stroke') === '#000000') p.setAttribute('stroke', '#FFED7D');
+    const stroke = p.getAttribute('stroke');
+    if (!stroke || stroke === '#000000' || stroke === '#FFED7D' || stroke === '#0d0e10') {
+      p.setAttribute('stroke', defaultStroke);
+    }
   });
 }
 
@@ -980,6 +1018,14 @@ function renderStats() {
   const timeStr = (lastResult.elapsedMs / 1000).toFixed(1) + 's';
   statsRow.textContent = t('statsLine', { shapes: lastResult.shapesRaw.length, segments: lastResult.segCount, time: timeStr });
 }
+
+document.getElementById('btn-toggle-bg').onclick = () => {
+  previewCanvas.classList.toggle('light-bg');
+  const isLight = previewCanvas.classList.contains('light-bg');
+  document.getElementById('btn-toggle-bg').setAttribute('data-i18n', isLight ? 'toggleBgDark' : 'toggleBgLight');
+  document.getElementById('btn-toggle-bg').textContent = t(isLight ? 'toggleBgDark' : 'toggleBgLight');
+  previewCanvas.querySelectorAll('svg').forEach(styleInjectedSVG);
+};
 
 document.getElementById('btn-reset').onclick = () => {
   lastResult = null;
