@@ -6,6 +6,10 @@ A browser-based tool that removes hidden geometry from layered SVG plotter art �
 
 ## The problem
 
+This tool exists because Cron, a member of the Affinity Discord community,
+ran into exactly this problem with a real plotter composition and asked
+about it.
+
 Generative rigs (Cavalry, Processing, and similar tools) often export each "iteration" of a composition as a solid **filled** shape — used only to visually mask earlier iterations in a raster preview — plus a **stroke-only** outline of that same shape, in document order (later elements painted on top, same as any SVG renderer).
 
 A pen plotter ignores fill entirely. It draws every stroke in full, including the portions that were only ever meant to be hidden behind a later shape's fill — producing messy, overlapping lines where the artwork was designed to show clean, occluded ribbons.
