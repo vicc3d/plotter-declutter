@@ -67,6 +67,11 @@ no browser, no export/reimport round trip.
 Open strokes with no closed area (plain lines straight out of some rigs)
 aren't clipped correctly yet.
 
+**Known issue:** running this on a document with a *linked* (not embedded)
+source SVG has been reported to run very slowly and, in one case, crash --
+likely related to live source-file syncing during the operation. Works
+fine on embedded/pasted artwork. If you hit this, let us know what you see.
+
 This exists because Affinity's boolean operations (union/subtract) are
 implemented natively but not yet exposed in the documented scripting API --
 Cron went back to the Affinity team to confirm they were reachable at all,
