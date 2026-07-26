@@ -49,6 +49,31 @@ A zero-dependency JavaScript CLI that runs out of the box in Node.
 ### 2. Python CLI (`plotter_declutter.py`)
 An alternative python CLI that handles curve-heavy SVGs via `svgelements` + `shapely` dependencies.
 
+## Affinity Script (Native)
+
+A native version (`scripts/affinity/plotter_declutter_native.js`) that runs
+directly inside Affinity, for shapes already imported into the document --
+no browser, no export/reimport round trip.
+
+**How to use it:**
+1. Import or paste your plotter/generative-art SVG into an Affinity document.
+2. Select all the shapes that make up the artwork (Edit > Select All works
+   even if they're nested inside a group, as SVG imports usually are).
+3. Run the script.
+4. Each shape is clipped to only the portion not covered by shapes drawn
+   after it. Shapes fully hidden behind later shapes are removed entirely.
+
+**Known limitation:** works on closed shapes (real filled/fillable areas).
+Open strokes with no closed area (plain lines straight out of some rigs)
+aren't clipped correctly yet.
+
+This exists because Affinity's boolean operations (union/subtract) are
+implemented natively but not yet exposed in the documented scripting API --
+Cron went back to the Affinity team to confirm they were reachable at all,
+which is the only reason this script could be built. Validated end-to-end
+by Cron on a real ~180-shape generative composition (37.8s). Thanks for
+pushing on this.
+
 ## Structure
 
 ```
@@ -57,7 +82,9 @@ plotter-declutter/
 ├── declutter-cli.js        ← Node.js CLI tool (zero dependencies)
 ├── plotter_declutter.py    ← optional Python CLI alternative
 ├── scripts/
-│   └── clipper.js          ← ClipperLib, vendored locally for offline use
+│   ├── clipper.js                        ← ClipperLib, vendored locally for offline use
+│   └── affinity/
+│       └── plotter_declutter_native.js   ← native Affinity Script version
 └── README.md
 ```
 
