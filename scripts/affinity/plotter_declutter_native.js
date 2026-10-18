@@ -111,7 +111,7 @@ function showMessage(title, lines) {
     }
 
     const seconds = (elapsedMs / 1000).toFixed(1);
-    showMessage("Plotter Declutter — Done", [
+    showMessage("Plotter Declutter: Done", [
         withZ.length + " shapes processed in " + seconds + "s.",
         visibleResults.length + " shapes are now visible" +
             (hiddenCount > 0 ? " (" + hiddenCount + " were fully hidden and removed)." : "."),

@@ -453,8 +453,8 @@
 const i18n = {
   es: {
     about: "Acerca de",
-    dropTitle: "Arrastrá tu SVG aquí",
-    dropHint: "o hacé clic para elegir el archivo · todo se procesa en tu navegador",
+    dropTitle: "Arrastra tu SVG aquí",
+    dropHint: "o haz clic para elegir el archivo · todo se procesa en tu navegador",
     tabBefore: "Antes", tabAfter: "Después", tabCompare: "Comparar", tabCode: "Código",
     toggleBgLight: "Fondo Claro", toggleBgDark: "Fondo Oscuro",
     layersTitle: "Capas por color:", optimizeTsp: "Optimizar orden (TSP)",
@@ -465,7 +465,7 @@ const i18n = {
     statsLine: "{shapes} formas · {segments} segmentos visibles · {time}",
     errorParse: "No pude leer ese archivo como SVG. ¿Es un .svg válido?",
     errorNoPaths: "No encontré ningún <path> en el archivo. Esta herramienta trabaja sobre paths con fill/stroke (el patrón típico de Cavalry); otras formas (rect, circle, polygon) todavía no están soportadas.",
-    errorLib: "No pude cargar la librería de geometría (ClipperLib) desde el CDN. Revisá tu conexión o probá de nuevo en un minuto.",
+    errorLib: "No pude cargar la librería de geometría (ClipperLib) desde el CDN. Revisa tu conexión o prueba de nuevo en un minuto.",
     errorGeneric: "Algo falló procesando el archivo: {msg}",
     aboutTitle: "Acerca de Plotter Declutter",
     aboutBody: "Plotter Declutter\n\nMuchos rigs generativos (Cavalry, Processing, etc.) exportan cada iteración como una forma con FILL sólido -- para tapar visualmente las iteraciones anteriores en el preview -- más un STROKE con el contorno. Un plotter de pluma ignora el fill, así que dibuja cada línea completa, incluyendo lo que debería quedar oculto.\n\nEsta herramienta resta de cada trazo la unión de todas las formas dibujadas después (las que lo tapan), dejando solo la parte realmente visible -- lista para plotear.\n\nTodo el cálculo corre en tu navegador, con ClipperLib. Ningún archivo se sube a ningún servidor.\n\n3dvic.com · MIT License",

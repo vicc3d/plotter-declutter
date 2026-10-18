@@ -1,6 +1,6 @@
 # Plotter Declutter
 
-A browser-based tool that removes hidden geometry from layered SVG plotter art — no install, no server, runs entirely client-side.
+A browser-based tool that removes hidden geometry from layered SVG plotter art: no install, no server, runs entirely client-side.
 
 **Try it:** open `index.html` in any browser, or visit [3dvic.com/apps/plotter-declutter](https://3dvic.com/apps/plotter-declutter/)
 
@@ -10,13 +10,13 @@ This tool exists because Cron, a member of the Affinity Discord community,
 ran into exactly this problem with a real plotter composition and asked
 about it.
 
-Generative rigs (Cavalry, Processing, and similar tools) often export each "iteration" of a composition as a solid **filled** shape — used only to visually mask earlier iterations in a raster preview — plus a **stroke-only** outline of that same shape, in document order (later elements painted on top, same as any SVG renderer).
+Generative rigs (Cavalry, Processing, and similar tools) often export each "iteration" of a composition as a solid **filled** shape (used only to visually mask earlier iterations in a raster preview) plus a **stroke-only** outline of that same shape, in document order (later elements painted on top, same as any SVG renderer).
 
-A pen plotter ignores fill entirely. It draws every stroke in full, including the portions that were only ever meant to be hidden behind a later shape's fill — producing messy, overlapping lines where the artwork was designed to show clean, occluded ribbons.
+A pen plotter ignores fill entirely. It draws every stroke in full, including the portions that were only ever meant to be hidden behind a later shape's fill, producing messy, overlapping lines where the artwork was designed to show clean, occluded ribbons.
 
 ## The fix
 
-For every stroked path, subtract the union of every filled shape that comes *after* it in document order (i.e. anything painted on top of it). What's left is exactly the portion of that line a viewer would actually see — which is also exactly what the plotter should draw.
+For every stroked path, subtract the union of every filled shape that comes *after* it in document order (i.e. anything painted on top of it). What's left is exactly the portion of that line a viewer would actually see, which is also exactly what the plotter should draw.
 
 Processes a few hundred shapes in under a second, ~1000+ in a few seconds, entirely in-browser via [ClipperLib](https://sourceforge.net/projects/jsclipper/).
 
@@ -38,7 +38,7 @@ Processes a few hundred shapes in under a second, ~1000+ in a few seconds, entir
 4. Compare Before / After.
 5. Download the cleaned SVG or DXF, ready to send to your plotter.
 
-**Fully offline.** No file is ever uploaded anywhere, and no internet connection is needed at all — `scripts/clipper.js` is vendored locally in this repo (not loaded from a CDN), so the whole tool works the moment you open `index.html`, network or no network.
+**Fully offline.** No file is ever uploaded anywhere, and no internet connection is needed at all: `scripts/clipper.js` is vendored locally in this repo (not loaded from a CDN), so the whole tool works the moment you open `index.html`, network or no network.
 
 ## CLI Tools
 
